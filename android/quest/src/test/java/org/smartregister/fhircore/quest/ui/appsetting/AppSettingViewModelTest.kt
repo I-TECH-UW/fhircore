@@ -39,6 +39,7 @@ import java.nio.charset.StandardCharsets
 import java.util.Base64
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -65,6 +66,7 @@ import org.smartregister.fhircore.engine.configuration.profile.ProfileConfigurat
 import org.smartregister.fhircore.engine.configuration.register.RegisterConfiguration
 import org.smartregister.fhircore.engine.data.local.DefaultRepository
 import org.smartregister.fhircore.engine.data.remote.fhir.resource.FhirResourceDataSource
+import org.smartregister.fhircore.engine.datastore.PreferenceDataStore
 import org.smartregister.fhircore.engine.domain.model.FhirResourceConfig
 import org.smartregister.fhircore.engine.domain.model.ResourceConfig
 import org.smartregister.fhircore.engine.util.DispatcherProvider
@@ -88,7 +90,10 @@ class AppSettingViewModelTest : RobolectricTest() {
 
   @Inject lateinit var fhirEngine: FhirEngine
 
+  @Inject lateinit var preferenceDataStore: PreferenceDataStore
+
   @Inject lateinit var dispatcherProvider: DispatcherProvider
+
   private val defaultRepository = mockk<DefaultRepository>()
   private val fhirResourceDataSource = mockk<FhirResourceDataSource>()
   private val configService = mockk<ConfigService>()
@@ -106,6 +111,7 @@ class AppSettingViewModelTest : RobolectricTest() {
           fhirResourceDataSource = fhirResourceDataSource,
           defaultRepository = defaultRepository,
           sharedPreferencesHelper = sharedPreferencesHelper,
+          preferencesDataStore = preferenceDataStore,
           configService = configService,
           configurationRegistry = Faker.buildTestConfigurationRegistry(),
           dispatcherProvider = dispatcherProvider,
@@ -131,7 +137,7 @@ class AppSettingViewModelTest : RobolectricTest() {
     appSettingViewModel.loadConfigurations(context)
     Assert.assertNotNull(appSettingViewModel.showProgressBar.value)
     Assert.assertFalse(appSettingViewModel.showProgressBar.value!!)
-    Assert.assertEquals(appId, sharedPreferencesHelper.read(SharedPreferenceKey.APP_ID.name, null))
+    Assert.assertEquals(appId, preferenceDataStore.read(PreferenceDataStore.APP_ID).first())
   }
 
   @Test

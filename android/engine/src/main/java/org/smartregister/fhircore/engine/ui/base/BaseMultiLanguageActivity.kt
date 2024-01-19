@@ -20,20 +20,23 @@ import android.content.Context
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.lifecycle.lifecycleScope
+import dagger.hilt.android.AndroidEntryPoint
 import java.lang.UnsupportedOperationException
-import java.util.Locale
 import javax.inject.Inject
-import org.smartregister.fhircore.engine.util.SharedPreferenceKey
-import org.smartregister.fhircore.engine.util.SharedPreferencesHelper
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import org.smartregister.fhircore.engine.datastore.PreferenceDataStore
 import org.smartregister.fhircore.engine.util.extension.setAppLocale
 
 /**
  * Base class for all activities used in the app. Every activity should extend this class for
  * multi-language support.
  */
+
 abstract class BaseMultiLanguageActivity : AppCompatActivity() {
 
-  @Inject lateinit var sharedPreferencesHelper: SharedPreferencesHelper
+  abstract var preferenceDataStore: PreferenceDataStore
 
   override fun onCreate(savedInstanceState: Bundle?) {
     inject()
@@ -43,14 +46,12 @@ abstract class BaseMultiLanguageActivity : AppCompatActivity() {
   }
 
   override fun attachBaseContext(baseContext: Context) {
-    val lang =
-      baseContext
-        .getSharedPreferences(SharedPreferencesHelper.PREFS_NAME, Context.MODE_PRIVATE)
-        .getString(SharedPreferenceKey.LANG.name, Locale.ENGLISH.toLanguageTag())
-        ?: Locale.ENGLISH.toLanguageTag()
-    baseContext.setAppLocale(lang).run {
-      super.attachBaseContext(baseContext)
-      applyOverrideConfiguration(this)
+    lifecycleScope.launch {
+      val lang = preferenceDataStore.read(PreferenceDataStore.LANG).first()
+      baseContext.setAppLocale(lang).run {
+        super.attachBaseContext(baseContext)
+        applyOverrideConfiguration(this)
+      }
     }
   }
 

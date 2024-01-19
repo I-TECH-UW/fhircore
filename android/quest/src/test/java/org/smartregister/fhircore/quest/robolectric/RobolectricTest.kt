@@ -172,6 +172,7 @@ abstract class RobolectricTest {
   companion object {
 
     const val APP_DEBUG = "app/debug"
+    const val TEST_DATASTORE_NAME = "test_preferences_datastore"
 
     private val ASSET_BASE_PATH =
       "${System.getProperty("user.dir")}${File.separator}src${File.separator}test${File.separator}resources${File.separator}"

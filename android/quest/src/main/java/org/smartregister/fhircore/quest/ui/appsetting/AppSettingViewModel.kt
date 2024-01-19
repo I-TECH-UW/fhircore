@@ -44,6 +44,7 @@ import org.smartregister.fhircore.engine.configuration.profile.ProfileConfigurat
 import org.smartregister.fhircore.engine.configuration.register.RegisterConfiguration
 import org.smartregister.fhircore.engine.data.local.DefaultRepository
 import org.smartregister.fhircore.engine.data.remote.fhir.resource.FhirResourceDataSource
+import org.smartregister.fhircore.engine.datastore.PreferenceDataStore
 import org.smartregister.fhircore.engine.di.NetworkModule
 import org.smartregister.fhircore.engine.domain.model.FhirResourceConfig
 import org.smartregister.fhircore.engine.domain.model.ResourceConfig
@@ -67,6 +68,7 @@ constructor(
   val fhirResourceDataSource: FhirResourceDataSource,
   val defaultRepository: DefaultRepository,
   val sharedPreferencesHelper: SharedPreferencesHelper,
+  val preferencesDataStore: PreferenceDataStore,
   val configService: ConfigService,
   val configurationRegistry: ConfigurationRegistry,
   val dispatcherProvider: DispatcherProvider,
@@ -218,7 +220,7 @@ constructor(
         configurationRegistry.loadConfigurations(thisAppId, context) { loadConfigSuccessful ->
           showProgressBar.postValue(false)
           if (loadConfigSuccessful) {
-            sharedPreferencesHelper.write(SharedPreferenceKey.APP_ID.name, thisAppId)
+            this.launch { preferencesDataStore.write(PreferenceDataStore.APP_ID, data = thisAppId) }
             context.getActivity()?.launchActivityWithNoBackStackHistory<LoginActivity>()
           } else {
             _error.postValue(context.getString(R.string.application_not_supported, thisAppId))

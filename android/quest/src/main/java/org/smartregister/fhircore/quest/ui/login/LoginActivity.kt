@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import org.smartregister.fhircore.engine.data.remote.shared.TokenAuthenticator
+import org.smartregister.fhircore.engine.datastore.PreferenceDataStore
 import org.smartregister.fhircore.engine.p2p.dao.P2PReceiverTransferDao
 import org.smartregister.fhircore.engine.p2p.dao.P2PSenderTransferDao
 import org.smartregister.fhircore.engine.sync.AppSyncWorker
@@ -61,7 +62,10 @@ open class LoginActivity : BaseMultiLanguageActivity() {
 
   @Inject lateinit var eventBus: EventBus
 
+  @Inject override lateinit  var preferenceDataStore: PreferenceDataStore
+
   val loginViewModel by viewModels<LoginViewModel>()
+
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
