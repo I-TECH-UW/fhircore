@@ -156,6 +156,10 @@ dependencies {
     exclude(group = "ca.uhn.hapi.fhir")
   }
 
+  implementation(libs.hapi.fhir.validation) { exclude(module = "commons-logging") }
+  implementation(libs.hapi.fhir.validation.resources.r4)
+  implementation(libs.hapi.fhir.validation.resources.r5)
+
   // Shared dependencies
   api(libs.bundles.datastore.kt)
   api(libs.glide)

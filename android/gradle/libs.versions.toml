@@ -111,7 +111,7 @@ dagger-hilt = "2.45"
 jetbrains-dokka = "1.8.20"
 navigation-safeargs = "2.4.2"
 diffplug-spotless = "6.19.0"
-
+hapi-fhir = "6.0.1"
 
 [libraries]
 accompanist-flowlayout = { group = "com.google.accompanist", name = "accompanist-flowlayout", version.ref = "accompanist-flowlayout" }
@@ -222,6 +222,9 @@ work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version
 work-testing = { group = "androidx.work", name = "work-testing", version.ref = "work-testing" }
 workflow = { group = "org.smartregister", name = "workflow", version.ref = "workflow" }
 xercesImpl = { group = "xerces", name = "xercesImpl", version.ref = "xercesImpl" }
+hapi-fhir-validation = {group = "ca.uhn.hapi.fhir", name="hapi-fhir-validation", version.ref = "hapi-fhir"}
+hapi-fhir-validation-resources-r4 = {group = "ca.uhn.hapi.fhir", name="hapi-fhir-validation-resources-r4", version.ref = "hapi-fhir"}
+hapi-fhir-validation-resources-r5 = {group = "ca.uhn.hapi.fhir", name="hapi-fhir-validation-resources-r5", version.ref = "hapi-fhir"}
 
 [plugins]
 org-jetbrains-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "org-jetbrains-kotlin-android" }

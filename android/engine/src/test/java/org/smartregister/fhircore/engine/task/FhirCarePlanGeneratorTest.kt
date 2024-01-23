@@ -21,6 +21,7 @@ import ca.uhn.fhir.context.FhirContext
 import ca.uhn.fhir.context.FhirVersionEnum
 import ca.uhn.fhir.parser.IParser
 import ca.uhn.fhir.rest.gclient.ReferenceClientParam
+import ca.uhn.fhir.validation.FhirValidator
 import com.google.android.fhir.FhirEngine
 import com.google.android.fhir.SearchResult
 import com.google.android.fhir.get
@@ -45,6 +46,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.UUID
 import javax.inject.Inject
+import javax.inject.Provider
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -129,6 +131,8 @@ class FhirCarePlanGeneratorTest : RobolectricTest() {
 
   @Inject lateinit var workflowCarePlanGenerator: WorkflowCarePlanGenerator
 
+  @Inject lateinit var fhirValidatorProvider: Provider<FhirValidator>
+
   @Inject lateinit var fhirPathEngine: FHIRPathEngine
 
   @Inject lateinit var fhirEngine: FhirEngine
@@ -169,6 +173,7 @@ class FhirCarePlanGeneratorTest : RobolectricTest() {
         fhirPathEngine = fhirPathEngine,
         defaultRepository = defaultRepository,
         fhirResourceUtil = fhirResourceUtil,
+        fhirValidatorProvider = fhirValidatorProvider,
         workflowCarePlanGenerator = workflowCarePlanGenerator,
       )
 

@@ -22,6 +22,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import ca.uhn.fhir.validation.FhirValidator
 import com.google.android.fhir.datacapture.mapping.ResourceMapper
 import com.google.android.fhir.datacapture.mapping.StructureMapExtractionContext
 import com.google.android.fhir.datacapture.validation.NotValidated
@@ -35,6 +36,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.Date
 import java.util.UUID
 import javax.inject.Inject
+import javax.inject.Provider
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -67,7 +69,9 @@ import org.smartregister.fhircore.engine.util.extension.DEFAULT_PLACEHOLDER_PREF
 import org.smartregister.fhircore.engine.util.extension.appendOrganizationInfo
 import org.smartregister.fhircore.engine.util.extension.appendPractitionerInfo
 import org.smartregister.fhircore.engine.util.extension.asReference
+import org.smartregister.fhircore.engine.util.extension.checkResourceValid
 import org.smartregister.fhircore.engine.util.extension.cqfLibraryUrls
+import org.smartregister.fhircore.engine.util.extension.errorMessages
 import org.smartregister.fhircore.engine.util.extension.extractByStructureMap
 import org.smartregister.fhircore.engine.util.extension.extractId
 import org.smartregister.fhircore.engine.util.extension.extractLogicalIdUuid
@@ -80,6 +84,7 @@ import org.smartregister.fhircore.engine.util.extension.showToast
 import org.smartregister.fhircore.engine.util.extension.updateLastUpdated
 import org.smartregister.fhircore.engine.util.fhirpath.FhirPathDataExtractor
 import org.smartregister.fhircore.engine.util.helper.TransformSupportServices
+import org.smartregister.fhircore.quest.BuildConfig
 import org.smartregister.fhircore.quest.R
 import timber.log.Timber
 
@@ -94,6 +99,7 @@ constructor(
   val transformSupportServices: TransformSupportServices,
   val sharedPreferencesHelper: SharedPreferencesHelper,
   val fhirOperator: FhirOperator,
+  val fhirValidatorProvider: Provider<FhirValidator>,
   val fhirPathDataExtractor: FhirPathDataExtractor,
 ) : ViewModel() {
 
@@ -207,6 +213,21 @@ constructor(
           context = context,
         )
 
+      val validationResults =
+        bundle.entry
+          .map { it.resource }
+          .flatMap { fhirValidatorProvider.get().checkResourceValid(it) }
+      val validationFailures = validationResults.filterNot { it.errorMessages.isBlank() }
+      if (validationFailures.isNotEmpty()) {
+        val errorMessages = buildString {
+          validationFailures.map { it.errorMessages }.forEach(this::appendLine)
+        }
+        Timber.e(errorMessages)
+        context.showToast(context.getString(R.string.extracted_resources_validation_fail))
+        setProgressState(QuestionnaireProgressState.ExtractionInProgress(false))
+        return@launch
+      }
+
       saveExtractedResources(
         bundle = bundle,
         questionnaire = questionnaire,
@@ -232,6 +253,7 @@ constructor(
           val newBundle = bundle.copyBundle(currentQuestionnaireResponse)
 
           generateCarePlan(
+            context = context,
             subject = subject,
             bundle = newBundle,
             questionnaireConfig = questionnaireConfig,
@@ -624,18 +646,28 @@ constructor(
     subject: Resource,
     bundle: Bundle,
     questionnaireConfig: QuestionnaireConfig,
+    context: Context,
   ) {
-    questionnaireConfig.planDefinitions?.forEach { planId ->
-      kotlin
-        .runCatching {
-          fhirCarePlanGenerator.generateOrUpdateCarePlan(
-            planDefinitionId = planId,
-            subject = subject,
-            data = bundle,
-            generateCarePlanWithWorkflowApi = questionnaireConfig.generateCarePlanWithWorkflowApi,
-          )
-        }
-        .onFailure { Timber.e(it) }
+    val errorMessages = buildString {
+      questionnaireConfig.planDefinitions?.forEach { planId ->
+        kotlin
+          .runCatching {
+            fhirCarePlanGenerator.generateOrUpdateCarePlan(
+              planDefinitionId = planId,
+              subject = subject,
+              data = bundle,
+              generateCarePlanWithWorkflowApi = questionnaireConfig.generateCarePlanWithWorkflowApi,
+            )
+          }
+          .onFailure { appendLine(it) }
+      }
+    }
+
+    if (errorMessages.isNotBlank()) {
+      Timber.e(errorMessages)
+      if (BuildConfig.BUILD_TYPE.contains("debug", ignoreCase = true)) {
+        context.showToast(context.getString(R.string.error_occurred_generating_careplan))
+      }
     }
   }
 
