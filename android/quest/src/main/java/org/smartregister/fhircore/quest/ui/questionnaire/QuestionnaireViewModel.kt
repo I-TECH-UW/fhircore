@@ -22,6 +22,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import ca.uhn.fhir.context.FhirContext
 import ca.uhn.fhir.validation.FhirValidator
 import com.google.android.fhir.datacapture.mapping.ResourceMapper
 import com.google.android.fhir.datacapture.mapping.StructureMapExtractionContext
@@ -29,8 +30,11 @@ import com.google.android.fhir.datacapture.validation.NotValidated
 import com.google.android.fhir.datacapture.validation.QuestionnaireResponseValidator
 import com.google.android.fhir.datacapture.validation.Valid
 import com.google.android.fhir.db.ResourceNotFoundException
+import com.google.android.fhir.knowledge.KnowledgeManager
 import com.google.android.fhir.logicalId
 import com.google.android.fhir.search.Search
+import com.google.android.fhir.search.filter.TokenParamFilterCriterion
+import com.google.android.fhir.search.search
 import com.google.android.fhir.workflow.FhirOperator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.Date
@@ -41,12 +45,15 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.hl7.fhir.r4.context.IWorkerContext
+import org.hl7.fhir.r4.model.Base
 import org.hl7.fhir.r4.model.Basic
 import org.hl7.fhir.r4.model.Bundle
 import org.hl7.fhir.r4.model.Group
 import org.hl7.fhir.r4.model.IdType
+import org.hl7.fhir.r4.model.Library
 import org.hl7.fhir.r4.model.ListResource
 import org.hl7.fhir.r4.model.ListResource.ListEntryComponent
+import org.hl7.fhir.r4.model.Parameters
 import org.hl7.fhir.r4.model.Questionnaire
 import org.hl7.fhir.r4.model.QuestionnaireResponse
 import org.hl7.fhir.r4.model.RelatedPerson
@@ -99,9 +106,11 @@ constructor(
   val transformSupportServices: TransformSupportServices,
   val sharedPreferencesHelper: SharedPreferencesHelper,
   val fhirOperator: FhirOperator,
+  val knowledgeManager: KnowledgeManager,
   val fhirValidatorProvider: Provider<FhirValidator>,
   val fhirPathDataExtractor: FhirPathDataExtractor,
 ) : ViewModel() {
+  private val parser = FhirContext.forR4Cached().newJsonParser()
 
   private val authenticatedOrganizationIds by lazy {
     sharedPreferencesHelper.read<List<String>>(ResourceType.Organization.name)
@@ -131,8 +140,7 @@ constructor(
     val questionnaireComputedValues =
       questionnaireConfig.configRules?.let {
         resourceDataRulesExecutor.computeResourceDataRules(it, null, emptyMap())
-      }
-        ?: emptyMap()
+      } ?: emptyMap()
 
     val allActionParameters =
       actionParameters?.plus(
@@ -315,8 +323,7 @@ constructor(
     val extractedResourceUniquePropertyExpressionsMap =
       questionnaireConfig.extractedResourceUniquePropertyExpressions?.associateBy {
         it.resourceType
-      }
-        ?: emptyMap()
+      } ?: emptyMap()
 
     bundle.entry?.forEach { bundleEntryComponent ->
       bundleEntryComponent.resource?.run {
@@ -378,6 +385,7 @@ constructor(
         )
         addMemberToGroup(
           resource = this,
+          memberResourceType = questionnaireConfig.groupResource?.memberResourceType,
           groupIdentifier = questionnaireConfig.groupResource?.groupIdentifier,
         )
 
@@ -631,12 +639,49 @@ constructor(
       val basicResource = defaultRepository.loadResource(resourceId) as Basic?
       bundle.addEntry(Bundle.BundleEntryComponent().setResource(basicResource))
     }
-    questionnaire.cqfLibraryUrls().forEach { library ->
-      if (subject.resourceType == ResourceType.Patient) {
-        fhirOperator.evaluateLibrary(library, subject.asReference().reference, null, setOf())
+
+    val libraryFilters =
+      questionnaire.cqfLibraryUrls().map {
+        val apply: TokenParamFilterCriterion.() -> Unit = { value = of(it.extractLogicalIdUuid()) }
+        apply
       }
+
+    if (libraryFilters.isNotEmpty()) {
+      defaultRepository.fhirEngine
+        .search<Library> { filter(Resource.RES_ID, *libraryFilters.toTypedArray()) }
+        .forEach { librarySearchResult ->
+          val result: Parameters =
+            fhirOperator.evaluateLibrary(
+              librarySearchResult.resource.url,
+              subject.asReference().reference,
+              null,
+              bundle,
+              null,
+            ) as Parameters
+
+          result.parameter.mapNotNull { cqlResultParameterComponent ->
+            (cqlResultParameterComponent.value ?: cqlResultParameterComponent.resource)?.let {
+              resultParameterResource ->
+              if (
+                cqlResultParameterComponent.name.equals(OUTPUT_PARAMETER_KEY) &&
+                  resultParameterResource.isResource
+              ) {
+                defaultRepository.create(true, resultParameterResource as Resource)
+              }
+
+              if (BuildConfig.DEBUG) {
+                Timber.d(
+                  "CQL :: Param found: ${cqlResultParameterComponent.name} with value: ${getStringRepresentation(resultParameterResource)}",
+                )
+              }
+            }
+          }
+        }
     }
   }
+
+  private fun getStringRepresentation(base: Base): String =
+    if (base.isResource) parser.encodeResourceToString(base as Resource) else base.toString()
 
   /**
    * This function generates CarePlans for the [QuestionnaireResponse.subject] using the configured
@@ -672,7 +717,7 @@ constructor(
   }
 
   /** Update the [Group.managingEntity] */
-  suspend fun updateGroupManagingEntity(
+  private suspend fun updateGroupManagingEntity(
     resource: Resource,
     groupIdentifier: String?,
     managingEntityRelationshipCode: String?,
@@ -699,12 +744,15 @@ constructor(
    * NOT the same as the retrieved [GroupResourceConfig.groupIdentifier] (Cannot add a [Group] as
    * member of itself.
    */
-  suspend fun addMemberToGroup(resource: Resource, groupIdentifier: String?) {
+  suspend fun addMemberToGroup(
+    resource: Resource,
+    memberResourceType: ResourceType?,
+    groupIdentifier: String?,
+  ) {
     // Load the Group resource from the database to get the updated one
     val group =
       groupIdentifier?.extractLogicalIdUuid()?.let { loadResource(ResourceType.Group, it) }
-        as Group?
-        ?: return
+        as Group? ?: return
 
     val reference = resource.asReference()
     val member = group.member.find { it.entity.reference.equals(reference.reference, true) }
@@ -724,7 +772,7 @@ constructor(
         ResourceType.Practitioner,
         ResourceType.PractitionerRole,
         ResourceType.Specimen,
-      )
+      ) && resource.resourceType == memberResourceType
     ) {
       group.addMember(Group.GroupMemberComponent().apply { entity = reference })
       defaultRepository.addOrUpdate(resource = group)
@@ -863,5 +911,6 @@ constructor(
 
   companion object {
     const val CONTAINED_LIST_TITLE = "GeneratedResourcesList"
+    const val OUTPUT_PARAMETER_KEY = "OUTPUT"
   }
 }

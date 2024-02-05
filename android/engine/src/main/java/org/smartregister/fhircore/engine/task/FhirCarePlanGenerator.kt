@@ -234,12 +234,13 @@ constructor(
 
         carePlan.contained.clear()
 
+        // TODO Confirm why reversion here
         // Save CarePlan only if it has activity, otherwise just save contained/dependent resources
-        if (output.hasActivity()) {
-          defaultRepository.create(true, carePlan)
-        }
+        // if (output.hasActivity()) defaultRepository.addOrUpdate(true, carePlan)
 
-        dependents.forEach { defaultRepository.create(true, it) }
+        defaultRepository.addOrUpdate(true, carePlan)
+
+        dependents.forEach { defaultRepository.addOrUpdate(true, it) }
 
         if (carePlan.status == CarePlan.CarePlanStatus.COMPLETED) {
           carePlan.activity
@@ -270,7 +271,7 @@ constructor(
       ?.run { defaultRepository.addOrUpdate(addMandatoryTags = true, resource = this) }
   }
 
-  suspend fun cancelTaskByTaskId(id: String, reason: String) {
+  private suspend fun cancelTaskByTaskId(id: String, reason: String) {
     updateTaskDetailsByResourceId(id, TaskStatus.CANCELLED, reason)
   }
 
@@ -398,7 +399,7 @@ constructor(
             )
 
           if (resourceClosureConditionsMet) {
-            defaultRepository.updateResourcesRecursively(eventResource, subject)
+            defaultRepository.updateResourcesRecursively(eventResource, subject, eventWorkFlow)
           }
         }
       }
