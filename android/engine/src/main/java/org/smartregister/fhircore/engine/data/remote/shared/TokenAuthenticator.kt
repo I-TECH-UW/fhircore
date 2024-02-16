@@ -222,7 +222,7 @@ constructor(
         accounts.find { it.name == username && it.type == authConfiguration.accountType }
 
       val currentAccount =
-        secureSharedPreference.retrieveCredentials()?.let { cred ->
+        secureSharedPreference.retrieveSessionCredentials()?.let { cred ->
           accounts.find { it.name == cred.username && it.type == authConfiguration.accountType }
         }
       if (currentAccount != null) {
@@ -231,8 +231,6 @@ constructor(
         val currentUserRoles = getRolesList(currentAccessToken)
         val secondUserRoles = getRolesList(oAuthResponse.accessToken)
 
-        // todo: verify requirements (with pm/tpm) on comparing match for user permission roles,
-        //  also which roles to compare
         // todo: optimise
         val allMatching = currentUserRoles.all { secondUserRoles.contains(it) }
         if (!allMatching) throw IllegalAccessException("Unauthorized")
@@ -247,7 +245,10 @@ constructor(
         setAuthToken(newAccount, AUTH_TOKEN_TYPE, oAuthResponse.accessToken)
       }
       // Save credentials
-      secureSharedPreference.saveCredentials(username, password)
+      secureSharedPreference.apply {
+        saveMultiCredentials(username, password)
+        saveSessionUsername(username)
+      }
     }
   }
 
@@ -272,18 +273,16 @@ constructor(
   }
 
   fun validateSavedLoginCredentials(username: String, enteredPassword: CharArray): Boolean {
-    val credentials = secureSharedPreference.retrieveCredentials()
-    return if (username.equals(credentials?.username, ignoreCase = true)) {
-      val generatedHash =
-        enteredPassword.toPasswordHash(Base64.getDecoder().decode(credentials!!.salt))
-      generatedHash == credentials.passwordHash
-    } else {
-      false
-    }
+    val usernameCredential = secureSharedPreference.retrieveCredentials(username)
+    return if (usernameCredential != null){
+      val usernameGeneratedHash = enteredPassword.toPasswordHash(Base64.getDecoder().decode(
+        usernameCredential.salt))
+      usernameGeneratedHash == usernameCredential.passwordHash
+    } else false
   }
 
   fun findAccount(): Account? {
-    val credentials = secureSharedPreference.retrieveCredentials()
+    val credentials = secureSharedPreference.retrieveSessionCredentials()
     return accountManager.getAccountsByType(authConfiguration.accountType).find {
       it.name == credentials?.username
     }
