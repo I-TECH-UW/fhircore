@@ -255,9 +255,12 @@ class PatientExtensionTest : RobolectricTest() {
   }
 
   @Test
-  fun testExtractAgeShouldReturnCallGetAgeStringFromDaysWhenPatientHasBirthDate() {
-    val calendar =
-      Calendar.getInstance().apply { timeInMillis = (timeInMillis - (1L * 365 * 24 * 3600 * 1000)) }
+  fun testExtractAgeShouldReturnAgeStringFromDaysWhenPatientHasBirthDate() {
+    val calendar = Calendar.getInstance()
+    calendar.apply {
+      timeInMillis =
+        (timeInMillis - (1L * calendar.getActualMaximum(Calendar.DAY_OF_YEAR) * 24 * 3600 * 1000))
+    }
 
     val patient = Patient().apply { birthDate = calendar.time }
 
